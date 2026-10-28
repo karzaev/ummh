@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.1
+
+- One Apple Silicon build for macOS 26 and later.
+- Compatible microphone selection on macOS 26, retaining scoped AudioUnit access on macOS 27.
+- Exclude the unused optional NeMo text-processing library from dictation builds.
+- Verified with 38 automated tests covering recording lifecycle, streaming, cancellation and delivery.
+
 ## 0.1.0
 
 - Native macOS dictation with local Parakeet TDT v3 recognition.

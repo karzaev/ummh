@@ -23,9 +23,9 @@ model if prompted, and wait for **Ready to dictate**.
 
 ## Install
 
-**Apple Silicon · macOS 27+**
+**Apple Silicon · macOS 26+**
 
-[Download v0.1.0 (DMG)](https://github.com/karzaev/ummh/releases/download/v0.1.0/ummh-0.1.0-arm64-adhoc.dmg),
+[Download v0.1.1 (DMG)](https://github.com/karzaev/ummh/releases/download/v0.1.1/ummh-0.1.1-arm64-adhoc.dmg),
 open it, and drag ummh into Applications. This build is not notarized; macOS may
 require approval on first launch. See [release details](docs/releases.md).
 

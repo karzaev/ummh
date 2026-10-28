@@ -13,7 +13,11 @@ download models or post keyboard events.
 
 For manual testing, use the packaged app and verify recording, release-to-copy,
 optional paste, Escape cancellation and another recording after cancellation.
-Microphone and Accessibility access are required.
+Microphone and Accessibility access are required. Check both the system-default
+microphone and an explicitly selected input on macOS 26 and macOS 27 or later.
+Check the packaged executable's minimum OS with `vtool -show-build`, alongside
+`LSMinimumSystemVersion` in its Info.plist. Compilation for macOS 26 does not
+replace a live recording and recognition check on that OS.
 
 File replay is available for recognition diagnostics:
 

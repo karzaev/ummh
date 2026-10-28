@@ -79,10 +79,16 @@ final class AudioCapture: @unchecked Sendable {
         let input = engine.inputNode
         if !deviceUID.isEmpty {
             guard var device = AudioDevices.inputs().first(where: { $0.id == deviceUID })?.audioID else { throw CaptureError.unavailable }
-            let status = input.withAudioUnit { unit -> OSStatus in
+            func selectDevice(_ unit: AudioUnit?) -> OSStatus {
                 guard let unit else { return kAudio_ParamError }
                 return AudioUnitSetProperty(unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global,
                                             0, &device, UInt32(MemoryLayout<AudioDeviceID>.size))
+            }
+            let status: OSStatus
+            if #available(macOS 27.0, *) {
+                status = input.withAudioUnit { selectDevice($0) }
+            } else {
+                status = selectDevice(input.audioUnit)
             }
             guard status == noErr else { throw CaptureError.unavailable }
         }

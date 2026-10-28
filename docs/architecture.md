@@ -2,16 +2,19 @@
 
 ummh is a SwiftPM executable packaged as a native macOS app. SwiftUI provides
 settings and recording views; AppKit owns the menu bar, nonactivating recording
-panel and application lifecycle.
+panel and application lifecycle. The deployment target is macOS 26 on Apple Silicon.
 
 ## Recognition
 
 AudioCapture converts microphone PCM into mono Float32 samples at 16 kHz.
-Audio stays in memory. SpeechEngine owns a warm Parakeet TDT v3 recognizer and
+Audio stays in memory. Explicit microphone selection uses scoped AudioUnit access
+on macOS 27 and the compatible AudioUnit property on macOS 26, before capture starts.
+SpeechEngine owns a warm Parakeet TDT v3 recognizer and
 Silero VAD through FluidAudio. Streaming previews process unconfirmed audio at
 one-second intervals. WordAgreementEngine tracks each word's confirmation
 history and punctuation boundaries; the final pass combines a stable prefix
-with the remaining tail when appropriate.
+with the remaining tail when appropriate. FluidAudio's optional NeMo text-processing
+trait is disabled; this dictation pipeline does not use TTS or inverse text normalization.
 
 ## Sessions
 

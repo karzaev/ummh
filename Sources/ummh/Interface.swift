@@ -192,7 +192,7 @@ struct SettingsView: View {
 }
 
 struct AboutView: View {
-    private var version: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0" }
+    private var version: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.1" }
 
     var body: some View {
         VStack(spacing: 16) {

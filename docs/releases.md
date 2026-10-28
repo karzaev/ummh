@@ -1,6 +1,7 @@
 # Releases
 
-ummh supports Apple Silicon and macOS 27 or later.
+ummh supports Apple Silicon and macOS 26 or later. One DMG covers both macOS 26
+and newer versions.
 
 Open the DMG and drag ummh into Applications. The build is ad-hoc signed and is
 not notarized by Apple. macOS may require explicit first-launch approval; see
