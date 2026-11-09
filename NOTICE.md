@@ -19,7 +19,8 @@ VoiceInk reference revision `1b04d42c`.
 - `Sources/ummh/Hotkey.swift` uses the event-tap lifecycle pattern from
   `ShortcutMonitor.swift`; it is a smaller Accessibility-authorized event tap
   that returns all original events unchanged.
-- The screen fallback order follows VoiceInk's `RecorderScreenResolver.swift`.
+- The recording panel's cursor-first placement and retained display selection
+  follow VoiceInk's `RecorderScreenResolver.swift` at revision `f2c6563e`.
 
 `resources/sounds/start.mp3` and `finish.mp3` are VoiceInk's default
 `sound5.mp3` and `sound6.mp3`, used at volume 0.3.

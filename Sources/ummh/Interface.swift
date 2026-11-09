@@ -91,6 +91,8 @@ struct RecordingSurface: View {
 
 @MainActor
 final class RecordingPanel: NSPanel {
+    private var screenSelection = RecordingScreenSelection()
+
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 
@@ -109,16 +111,54 @@ final class RecordingPanel: NSPanel {
 
     func refresh(_ controller: SessionController) {
         let visible = controller.phase.busy || controller.showsSessionError
-        guard visible else { orderOut(nil); return }
-        let screen = NSScreen.main
-            ?? NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) })
-            ?? NSScreen.screens.first
-        guard let screen else { orderOut(nil); return }
+        guard visible else {
+            screenSelection.reset()
+            orderOut(nil)
+            return
+        }
+        let displays = NSScreen.screens.map {
+            RecordingScreenSelection.Display(id: Self.displayID($0), frame: $0.frame, visibleFrame: $0.visibleFrame)
+        }
+        guard let display = screenSelection.resolve(displays, cursor: NSEvent.mouseLocation,
+                                                    mainID: NSScreen.main.flatMap(Self.displayID)) else {
+            orderOut(nil)
+            return
+        }
         let expanded = controller.settings.showLiveText && !controller.partialText.isEmpty && controller.phase == .recording
         let size = NSSize(width: expanded || controller.showsSessionError ? 360 : 124, height: expanded ? 105 : 44)
-        let frame = screen.visibleFrame
+        let frame = display.visibleFrame
         setFrame(NSRect(x: frame.midX - size.width / 2, y: frame.minY + 24, width: size.width, height: size.height), display: true)
         orderFrontRegardless()
+    }
+
+    private static func displayID(_ screen: NSScreen) -> CGDirectDisplayID? {
+        (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value
+    }
+}
+
+// Display selection follows VoiceInk's RecorderScreenResolver; see NOTICE.md.
+struct RecordingScreenSelection {
+    struct Display {
+        let id: CGDirectDisplayID?
+        let frame: NSRect
+        let visibleFrame: NSRect
+    }
+
+    private var displayID: CGDirectDisplayID?
+
+    mutating func resolve(_ displays: [Display], cursor: NSPoint, mainID: CGDirectDisplayID?) -> Display? {
+        if let displayID, let retained = displays.first(where: { $0.id == displayID }) {
+            return retained
+        }
+        guard let display = displays.first(where: { $0.frame.contains(cursor) })
+            ?? mainID.flatMap({ id in displays.first(where: { $0.id == id }) })
+            ?? displays.first else { return nil }
+        displayID = display.id
+        return display
+    }
+
+    mutating func reset() {
+        displayID = nil
     }
 }
 

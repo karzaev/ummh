@@ -19,6 +19,13 @@ Check the packaged executable's minimum OS with `vtool -show-build`, alongside
 `LSMinimumSystemVersion` in its Info.plist. Compilation for macOS 26 does not
 replace a live recording and recognition check on that OS.
 
+With two displays and a microphone that stays connected, start dictation with
+the cursor on the secondary display. Move the cursor to the other display and
+check that the panel stays in place. Disconnect the panel's display during
+recording and check that the panel moves to the remaining display and the
+transcript is delivered on release. Start another recording with the cursor on
+the desired display to verify that the selection resets when the panel closes.
+
 File replay is available for recognition diagnostics:
 
 ```sh

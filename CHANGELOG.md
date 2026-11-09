@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Open the recording panel on the display under the cursor and keep it there until the panel closes. If that display disconnects, move the panel to an available display.
+- Verified with 41 automated tests, including display selection, retention, and fallback on disconnect, and a signed local Release build.
+
 ## 0.1.1
 
 - One Apple Silicon build for macOS 26 and later.

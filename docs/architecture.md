@@ -27,6 +27,9 @@ A nonempty final result is copied once. Optional paste checks Accessibility,
 the foreground app, released shortcut modifiers and the clipboard version
 before posting Command+V. Synthetic paste events are ignored by the shortcut
 monitor. The recording panel never takes keyboard focus.
+It opens on the display under the cursor and keeps that display until it closes.
+If the display disappears, the panel selects an available display when macOS
+reports the change. The recording session continues if its microphone remains available.
 
 ## Permissions and distribution
 
