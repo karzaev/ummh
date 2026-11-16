@@ -24,6 +24,14 @@ VoiceInk reference revision `1b04d42c`.
 - `Sources/ummh/ScreenSleepPreventer.swift` adapts the recording-scoped display
   sleep assertion from `ScreenSleepPreventer.swift` at revision `c9e2544d`.
   Menu-bar updates follow the state-change-only approach in VoiceInk PR #1069.
+- `Sources/ummh/AudioCapture.swift` and `CaptureBuffer.swift` adapt the input-only
+  AUHAL setup, hardware-format configuration, bounded capture queue and callback
+  teardown from `VoiceInk/Infrastructure/Audio/CoreAudioRecorder.swift` at
+  revision `b5d1be9a7c7377dd059f37bb3e0f791b802d4001`.
+  Input selection, closed-lid fallback and internal-microphone identification
+  follow `AudioDeviceManager+RecordingRouting.swift` and `AudioDeviceManager.swift`
+  at the same revision. ummh retains audio in memory and uses AVAudioConverter
+  on its processing queue for mono Float32 16 kHz output.
 
 `resources/sounds/start.mp3` and `finish.mp3` are VoiceInk's default
 `sound5.mp3` and `sound6.mp3`, used at volume 0.3.

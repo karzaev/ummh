@@ -325,10 +325,10 @@ final class SessionLifecycleTests: XCTestCase {
     }
 
     @MainActor
-    func testConfigurationChangeWithUsableInputDoesNotCancelRecording() async {
+    func testUsableInputCheckDoesNotCancelRecording() async {
         let rig = Rig()
         await rig.recording()
-        rig.controller.audioConfigurationChanged()
+        rig.controller.checkAudioInput()
         XCTAssertEqual(rig.controller.phase, .recording)
         XCTAssertTrue(rig.audio.active)
         XCTAssertTrue(rig.sleepPrevention.active)
@@ -347,7 +347,7 @@ final class SessionLifecycleTests: XCTestCase {
         await rig.ready()
         rig.controller.press()
         await eventually { startup.waiting }
-        rig.controller.audioConfigurationChanged()
+        rig.controller.checkAudioInput()
         XCTAssertFalse(rig.audio.active)
         XCTAssertFalse(rig.sleepPrevention.active)
         startup.resume(())
@@ -362,13 +362,26 @@ final class SessionLifecycleTests: XCTestCase {
         let rig = Rig()
         rig.audio.configurationError = CaptureError.inputChanged
         await rig.recording()
-        rig.controller.audioConfigurationChanged()
+        await rig.preview()
         await eventually { rig.controller.phase == .ready }
         XCTAssertTrue(rig.controller.message.contains("microphone disconnected or changed"))
         XCTAssertFalse(rig.audio.active)
         XCTAssertFalse(rig.sleepPrevention.active)
         XCTAssertTrue(rig.delivery.copies.isEmpty)
         XCTAssertEqual(rig.sound.finishes, 1)
+    }
+
+    @MainActor
+    func testInputLostJustBeforeReleaseCannotDeliverBufferedAudio() async {
+        let rig = Rig()
+        await rig.recording()
+        rig.audio.configurationError = CaptureError.inputChanged
+        rig.controller.release()
+        await eventually { rig.controller.phase == .ready }
+        XCTAssertFalse(rig.audio.active)
+        XCTAssertFalse(rig.sleepPrevention.active)
+        XCTAssertTrue(rig.delivery.copies.isEmpty)
+        XCTAssertEqual(rig.speech.finishes, 0)
     }
 }
 
@@ -420,10 +433,9 @@ private final class FakeAudio: AudioCapturing {
     var startup: Suspension<Void>?
     var startError: Error?
     var configurationError: Error?
-    func recoverAfterConfigurationChange() throws {
+    func validateInput() throws {
         if let configurationError { throw configurationError }
     }
-    func ownsEngine(_ object: Any?) -> Bool { false }
     func start(deviceUID: String) throws {
         if let startError { throw startError }
         starts += 1

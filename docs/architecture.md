@@ -6,19 +6,23 @@ panel and application lifecycle. The deployment target is macOS 26 on Apple Sili
 
 ## Recognition
 
-AudioCapture converts microphone PCM into mono Float32 samples at 16 kHz.
-Audio stays in memory. Explicit microphone selection uses scoped AudioUnit access
-on macOS 27 and the compatible AudioUnit property on macOS 26, before capture starts.
-System-default capture uses AVAudioEngine's native input routing without setting
-the AudioUnit device. The resolved input is retained for configuration-change checks.
-The tap and converter use the input's hardware format, avoiding stale client
-formats after a device switch with a different sample rate.
-An audio-engine configuration notification is checked against that input and
-its hardware and tap formats. An unchanged input can restart the stopped engine
-with the existing tap and buffered PCM. A missing input, changed format or failed
-restart cancels the session. Recovery is deferred until the notification callback
-returns. A built-in microphone with the MacBook lid closed is reported as
-unavailable; an external microphone must be selected for closed-lid use.
+AudioCapture adapts VoiceInk's input-only AUHAL capture. Each recording enables
+input bus 1, disables output bus 0, selects a resolved input device and reads
+its hardware format before configuring a Float32 client format at the same rate.
+Changing the system audio output does not reconfigure this input-only unit.
+The audio callback renders into a bounded, preallocated queue. A serial processing
+queue downmixes and resamples audio through AVAudioConverter to mono Float32 at
+16 kHz. Stop waits for render callbacks and drains the queued audio and converter
+before returning the complete in-memory PCM. Capture errors prevent delivery.
+
+Device resolution follows VoiceInk. Prefer the system-default or explicitly
+selected input, then an available fallback. With the lid closed, skip the internal
+MacBook microphone and use an available external input. An external headset on
+the built-in codec is identified separately. The chosen input is retained for the
+session. Its availability, lid restriction and hardware format are checked during
+startup, before previews and on release. Losing that input cancels the recording;
+a subsequent recording resolves the available devices again.
+
 SpeechEngine owns a warm Parakeet TDT v3 recognizer and
 Silero VAD through FluidAudio. Streaming previews process unconfirmed audio at
 one-second intervals. WordAgreementEngine tracks each word's confirmation

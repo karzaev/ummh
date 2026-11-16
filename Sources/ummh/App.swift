@@ -1,5 +1,4 @@
 import AppKit
-import AVFoundation
 import Combine
 import SwiftUI
 
@@ -40,13 +39,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }.store(in: &subscriptions)
         observers.append(NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.controller.cancel() }
-        })
-        observers.append(NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: nil, queue: .main) { [weak self] notification in
-            // Defer recovery until after AVAudioEngine's notification callback returns.
-            Task { @MainActor [weak self] in
-                guard let self, self.controller.capture.ownsEngine(notification.object) else { return }
-                self.controller.audioConfigurationChanged()
-            }
         })
         observers.append(NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.refresh() }

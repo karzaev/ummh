@@ -1,83 +1,94 @@
 import AVFoundation
+import CoreAudio
+import IOKit.audio
 import XCTest
 @testable import ummh
 
 final class CaptureConfigurationTests: XCTestCase {
-    private func configuration(device: UInt32 = 7, hardwareRate: Double = 48_000,
-                               tapRate: Double = 48_000, builtIn: Bool = false) -> CaptureInputConfiguration {
-        CaptureInputConfiguration(deviceID: device,
-                                  hardwareFormat: AVAudioFormat(standardFormatWithSampleRate: hardwareRate, channels: 1)!,
-                                  tapFormat: AVAudioFormat(standardFormatWithSampleRate: tapRate, channels: 1)!, builtIn: builtIn)
-    }
+    private let internalMic = InputDevice(id: "internal", name: "Built-in microphone", audioID: 1, isInternal: true)
+    private let externalMic = InputDevice(id: "external", name: "USB microphone", audioID: 2, isInternal: false)
 
-    func testDelayedNotificationDoesNotRestartAnUnchangedRunningInput() throws {
-        var restarted = false
-        try configuration().restore(current: configuration(), lidClosed: false, running: true) { restarted = true }
-        XCTAssertFalse(restarted)
-    }
-
-    func testOutputRouteChangeRestartsAStoppedEngineWithUnchangedInput() throws {
-        var restarts = 0
-        try configuration().restore(current: configuration(), lidClosed: false, running: false) { restarts += 1 }
-        XCTAssertEqual(restarts, 1)
-    }
-
-    func testDisconnectOrDifferentInputCannotRestart() {
-        for current in [nil, configuration(device: 8)] {
-            XCTAssertThrowsError(try configuration().restore(current: current, lidClosed: false, running: false) {
-                XCTFail("Cannot restart a changed microphone")
-            }) { XCTAssertEqual(($0 as? CaptureError)?.errorDescription, CaptureError.inputChanged.errorDescription) }
+    func testDefaultAndExplicitSelectionWithEitherLidPosition() throws {
+        for closed in [false, true] {
+            let inputs = [internalMic, externalMic]
+            XCTAssertEqual(try AudioDevices.resolve(uid: "", inputs: inputs, defaultID: 1, lidClosed: closed).audioID, closed ? 2 : 1)
+            XCTAssertEqual(try AudioDevices.resolve(uid: "external", inputs: inputs, defaultID: 1, lidClosed: closed).audioID, 2)
         }
     }
 
-    func testHardwareFormatChangeCannotReuseTheTapEvenIfClientFormatIsUnchanged() {
-        XCTAssertThrowsError(try configuration().restore(current: configuration(hardwareRate: 44_100), lidClosed: false, running: false) {
-            XCTFail("Cannot reuse a tap after a hardware format change")
-        }) { XCTAssertEqual(($0 as? CaptureError)?.errorDescription, CaptureError.formatChanged.errorDescription) }
+    func testExternalSystemDefaultRemainsPreferredWithLidOpen() throws {
+        XCTAssertEqual(try AudioDevices.resolve(uid: "", inputs: [internalMic, externalMic], defaultID: 2, lidClosed: false).audioID, 2)
     }
 
-    func testClientFormatChangeCannotReuseTheConverter() {
-        XCTAssertThrowsError(try configuration().restore(current: configuration(tapRate: 44_100), lidClosed: false, running: true) {
-            XCTFail("Cannot reuse a converter after a client format change")
-        }) { XCTAssertEqual(($0 as? CaptureError)?.errorDescription, CaptureError.formatChanged.errorDescription) }
+    func testMissingPreferredInputFallsBackLikeVoiceInk() throws {
+        XCTAssertEqual(try AudioDevices.resolve(uid: "missing", inputs: [internalMic, externalMic], defaultID: 1, lidClosed: false).audioID, 1)
+        XCTAssertEqual(try AudioDevices.resolve(uid: "missing", inputs: [internalMic, externalMic], defaultID: 1, lidClosed: true).audioID, 2)
     }
 
-    func testRestartFailureReportsAudioInterruption() {
-        XCTAssertThrowsError(try configuration().restore(current: configuration(), lidClosed: false, running: false) {
-            throw CaptureError.unavailable
-        }) { XCTAssertEqual(($0 as? CaptureError)?.errorDescription, CaptureError.interrupted.errorDescription) }
-    }
-
-    func testClosedLidRejectsBuiltInMicrophoneAtStartupAndRecovery() {
-        let input = configuration(builtIn: true)
-        XCTAssertThrowsError(try input.validate(lidClosed: true)) {
+    func testClosedLidWithoutExternalInputReportsHardwareRestriction() {
+        XCTAssertThrowsError(try AudioDevices.resolve(uid: "", inputs: [internalMic], defaultID: 1, lidClosed: true)) {
             XCTAssertEqual(($0 as? CaptureError)?.errorDescription, CaptureError.lidClosed.errorDescription)
         }
-        XCTAssertThrowsError(try input.restore(current: input, lidClosed: true, running: true) {
-            XCTFail("Cannot restart the hardware-disabled built-in microphone")
-        }) { XCTAssertEqual(($0 as? CaptureError)?.errorDescription, CaptureError.lidClosed.errorDescription) }
-        XCTAssertNoThrow(try input.validate(lidClosed: false))
-    }
-
-    func testClosedLidAllowsAnExternalMicrophone() throws {
-        var restarted = false
-        try configuration().validate(lidClosed: true)
-        try configuration().restore(current: configuration(), lidClosed: true, running: false) { restarted = true }
-        XCTAssertTrue(restarted)
-    }
-
-    func testEmptyHardwareFormatCannotBecomeTheCaptureBaseline() {
-        let unavailable = CaptureInputConfiguration(deviceID: 7, hardwareFormat: AVAudioFormat(),
-                                                    tapFormat: configuration().tapFormat, builtIn: false)
-        XCTAssertThrowsError(try unavailable.validate(lidClosed: false)) {
+        XCTAssertThrowsError(try AudioDevices.resolve(uid: "", inputs: [], defaultID: nil, lidClosed: false)) {
             XCTAssertEqual(($0 as? CaptureError)?.errorDescription, CaptureError.unavailable.errorDescription)
         }
     }
 
-    func testStaleClientSampleRateCannotBecomeTheCaptureBaseline() {
-        let input = configuration(hardwareRate: 44_100, tapRate: 48_000)
-        XCTAssertThrowsError(try input.validate(lidClosed: false)) {
-            XCTAssertEqual(($0 as? CaptureError)?.errorDescription, CaptureError.formatChanged.errorDescription)
+    func testHeadsetOnBuiltInCodecIsNotDisabledByLid() {
+        XCTAssertFalse(AudioDevices.isInternalMicrophone(transport: kAudioDeviceTransportTypeBuiltIn,
+                        source: UInt32(kIOAudioSelectorControlSelectionValueExternalMicrophone), uid: "BuiltInMicrophoneDevice"))
+        XCTAssertTrue(AudioDevices.isInternalMicrophone(transport: kAudioDeviceTransportTypeBuiltIn,
+                        source: UInt32(kIOAudioSelectorControlSelectionValueInternalMicrophone), uid: nil))
+        XCTAssertTrue(AudioDevices.isInternalMicrophone(transport: kAudioDeviceTransportTypeBuiltIn,
+                        source: nil, uid: "BuiltInMicrophoneDevice"))
+        XCTAssertFalse(AudioDevices.isInternalMicrophone(transport: kAudioDeviceTransportTypeBuiltIn,
+                        source: nil, uid: "BuiltInHeadphoneInputDevice"))
+        XCTAssertFalse(AudioDevices.isInternalMicrophone(transport: kAudioDeviceTransportTypeUSB,
+                        source: nil, uid: "BuiltInMicrophoneDevice"))
+    }
+
+    func test44100And48000HzCaptureBothProduceOneSecondOf16kHzPCM() throws {
+        for rate in [44_100.0, 48_000.0] {
+            let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: rate, channels: 1, interleaved: true)!
+            let buffer = try CaptureBuffer(format: format, capacity: 4096)
+            for _ in 0..<50 {
+                XCTAssertEqual(fill(buffer, frames: UInt32(rate / 50), channels: [0.2]), noErr)
+            }
+            let samples = buffer.finish()
+            XCTAssertFalse(buffer.hasFailure)
+            XCTAssertEqual(samples.count, 16_000, accuracy: 1)
+            XCTAssertEqual(samples.dropFirst(100).reduce(Float(0), +) / Float(samples.count - 100), 0.2, accuracy: 0.01)
+        }
+    }
+
+    func testStereoDownmixAndStopDrainTheLastQueuedSamples() throws {
+        let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 48_000, channels: 2, interleaved: true)!
+        let buffer = try CaptureBuffer(format: format, capacity: 4096)
+        for _ in 0..<10 { XCTAssertEqual(fill(buffer, frames: 480, channels: [0.2, 0.4]), noErr) }
+        let samples = buffer.finish()
+        XCTAssertFalse(buffer.hasFailure)
+        XCTAssertEqual(samples.count, 1600, accuracy: 1)
+        XCTAssertEqual(samples.dropFirst(100).reduce(Float(0), +) / Float(samples.count - 100), 0.3, accuracy: 0.01)
+    }
+
+    func testRenderFailureAndOversizedCallbacksCannotDeliverPartialAudioAsSuccess() throws {
+        let format = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 1)!
+        let failed = try CaptureBuffer(format: format, capacity: 512)
+        XCTAssertEqual(failed.receive(frames: 480) { _ in kAudio_ParamError }, kAudio_ParamError)
+        XCTAssertTrue(failed.hasFailure)
+        XCTAssertTrue(failed.finish().isEmpty)
+        let oversized = try CaptureBuffer(format: format, capacity: 512)
+        _ = oversized.receive(frames: 513) { _ in XCTFail("Cannot render beyond allocated storage"); return noErr }
+        XCTAssertTrue(oversized.hasFailure)
+    }
+
+    private func fill(_ buffer: CaptureBuffer, frames: UInt32, channels: [Float]) -> OSStatus {
+        buffer.receive(frames: frames) { list in
+            let samples = list.pointee.mBuffers.mData!.assumingMemoryBound(to: Float.self)
+            for frame in 0..<Int(frames) {
+                for channel in channels.indices { samples[frame * channels.count + channel] = channels[channel] }
+            }
+            return noErr
         }
     }
 }

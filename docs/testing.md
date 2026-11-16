@@ -8,9 +8,10 @@ swift test
 
 Tests cover session startup, recording, streaming previews, release, cancellation,
 stale recognition results, clipboard delivery, paste guards and shortcut handling.
-They also cover display-sleep assertion lifetime, unchanged-input notifications,
-engine restart decisions, input/format loss and built-in versus external inputs
-with the lid closed.
+They also cover display-sleep assertion lifetime, VoiceInk-style input selection,
+closed-lid fallback, loss of input before release and headset identification.
+The capture queue is exercised with deterministic 44.1/48 kHz PCM, stereo downmix,
+converter flush, oversized callbacks and render failures.
 They use isolated settings and fake I/O; they do not record the microphone,
 download models or post keyboard events.
 
@@ -22,15 +23,22 @@ Check the packaged executable's minimum OS with `vtool -show-build`, alongside
 `LSMinimumSystemVersion` in its Info.plist. Compilation for macOS 26 does not
 replace a live recording and recognition check on that OS.
 
-For a MacBook with its lid closed, select an external microphone in Settings.
-Apple silicon MacBooks disconnect the built-in microphone in this position.
-Verify a USB display or headset input with the lid open and closed, both explicitly
-selected and as the system default. Change only the audio output during recording
-and check that input capture continues. Unplug the selected input and check for
-cancellation with no pasted text, then reconnect and start another recording.
-Also check the system-default microphone with a different sample rate from the
-audio output, such as a 44.1 kHz input and a 48 kHz USB output. Capture must start
-and deliver text without a hardware/client format mismatch.
+Verify these four combinations using the packaged app and the same short phrase.
+Check that the waveform reacts, streaming continues and the final text is copied
+or pasted after release.
+
+| Input setting | Lid open | Lid closed |
+| --- | --- | --- |
+| System default | Uses the available default input | Skips the hardware-disabled internal microphone and selects an available external input |
+| Explicit USB display microphone | Uses the selected microphone | Uses the selected microphone |
+
+Close the lid before starting each closed-lid recording. If no external input is
+available, expect a clear error rather than a successful silent recording. Check
+Escape followed by another recording with both input settings. Change only the
+audio output during recording and check that capture continues. Unplug the active
+input and check cancellation without pasted text, then reconnect and start again.
+Include different input and output sample rates, such as 44.1 kHz and 48 kHz.
+The system input/output settings must remain unchanged after these checks.
 
 During a long recording, check `pmset -g assertions` for the `ummh recording`
 display-sleep assertion. It must disappear after release, Escape, a capture error

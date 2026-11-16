@@ -84,6 +84,8 @@ final class SessionController: ObservableObject {
     func release() {
         if phase == .starting { cancel(); return }
         guard phase == .recording else { return }
+        checkAudioInput()
+        guard phase == .recording else { return }
         message = "Finishing transcription…"
         phase = .finishing
         let samples = stopCapture()
@@ -106,9 +108,9 @@ final class SessionController: ObservableObject {
         releaseSignal = nil
     }
 
-    func audioConfigurationChanged() {
+    func checkAudioInput() {
         guard phase == .recording || phase == .starting else { return }
-        do { try capture.recoverAfterConfigurationChange() }
+        do { try capture.validateInput() }
         catch { cancel(reason: error.localizedDescription) }
     }
 
@@ -207,6 +209,8 @@ final class SessionController: ObservableObject {
     private func streamPreview() async throws {
         while !Task.isCancelled {
             try await sleep(.seconds(1))
+            try Task.checkCancellation()
+            checkAudioInput()
             try Task.checkCancellation()
             if capture.hasConversionFailure { throw CaptureError.conversion }
             let text = try await speech.preview(capture.snapshot())
