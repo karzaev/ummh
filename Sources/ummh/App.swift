@@ -18,11 +18,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var subscriptions: Set<AnyCancellable> = []
     private var observers: [NSObjectProtocol] = []
     private var shortcutEventMonitor: Any?
+    private var displayedStatus: (active: Bool, message: String)?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        statusItem.button?.image = idleStatusIcon
+        configureMenu()
         panel = RecordingPanel(controller: controller)
         controller.objectWillChange.merge(with: permissions.objectWillChange).sink { [weak self] _ in
             // ObservableObject announces changes before the new values are stored.
@@ -41,9 +42,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MainActor.assumeIsolated { self?.controller.cancel() }
         })
         observers.append(NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: nil, queue: .main) { [weak self] notification in
-            MainActor.assumeIsolated {
+            // Defer recovery until after AVAudioEngine's notification callback returns.
+            Task { @MainActor [weak self] in
                 guard let self, self.controller.capture.ownsEngine(notification.object) else { return }
-                self.controller.inputLost()
+                self.controller.audioConfigurationChanged()
             }
         })
         observers.append(NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
@@ -73,11 +75,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func refresh() {
         guard statusItem != nil else { return }
         panel.refresh(controller)
-        statusItem.button?.image = controller.phase.busy ? activeStatusIcon : idleStatusIcon
+        let active = controller.phase.busy
+        if displayedStatus?.active != active {
+            statusItem.button?.image = active ? activeStatusIcon : idleStatusIcon
+        }
         let message = permissions.statusMessage(for: controller)
-        statusItem.button?.toolTip = "ummh · \(message)"
+        if displayedStatus?.message != message {
+            statusItem.button?.toolTip = "ummh · \(message)"
+            statusItem.menu?.item(at: 0)?.title = message
+        }
+        displayedStatus = (active, message)
+    }
+
+    private func configureMenu() {
         let menu = NSMenu()
-        let state = NSMenuItem(title: message, action: nil, keyEquivalent: "")
+        let state = NSMenuItem(title: "", action: nil, keyEquivalent: "")
         state.isEnabled = false
         menu.addItem(state)
         menu.addItem(.separator())

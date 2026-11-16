@@ -21,6 +21,9 @@ VoiceInk reference revision `1b04d42c`.
   that returns all original events unchanged.
 - The recording panel's cursor-first placement and retained display selection
   follow VoiceInk's `RecorderScreenResolver.swift` at revision `f2c6563e`.
+- `Sources/ummh/ScreenSleepPreventer.swift` adapts the recording-scoped display
+  sleep assertion from `ScreenSleepPreventer.swift` at revision `c9e2544d`.
+  Menu-bar updates follow the state-change-only approach in VoiceInk PR #1069.
 
 `resources/sounds/start.mp3` and `finish.mp3` are VoiceInk's default
 `sound5.mp3` and `sound6.mp3`, used at volume 0.3.

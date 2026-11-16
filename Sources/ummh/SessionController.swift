@@ -10,6 +10,7 @@ final class SessionController: ObservableObject {
     private let speech: any SpeechRecognizing
     private let delivery: any TranscriptDelivering
     private let sound: any RecordingFeedback
+    private let sleepPrevention: any RecordingSleepPreventing
     private let sleep: @MainActor (Duration) async throws -> Void
     @Published private(set) var phase: SessionPhase = .loading {
         didSet { logger.notice("State: \(String(describing: self.phase), privacy: .public)") }
@@ -27,17 +28,18 @@ final class SessionController: ObservableObject {
 
     convenience init(settings: Settings) {
         self.init(settings: settings, capture: AudioCapture(), speech: SpeechEngine(),
-                  delivery: SystemTranscriptDelivery(), sound: SoundFeedback())
+                  delivery: SystemTranscriptDelivery(), sound: SoundFeedback(), sleepPrevention: ScreenSleepPreventer())
     }
 
     init(settings: Settings, capture: any AudioCapturing, speech: any SpeechRecognizing,
-         delivery: any TranscriptDelivering, sound: any RecordingFeedback,
+         delivery: any TranscriptDelivering, sound: any RecordingFeedback, sleepPrevention: any RecordingSleepPreventing,
          sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
         self.settings = settings
         self.capture = capture
         self.speech = speech
         self.delivery = delivery
         self.sound = sound
+        self.sleepPrevention = sleepPrevention
         self.sleep = sleep
     }
 
@@ -84,7 +86,7 @@ final class SessionController: ObservableObject {
         guard phase == .recording else { return }
         message = "Finishing transcription…"
         phase = .finishing
-        let samples = capture.stop()
+        let samples = stopCapture()
         let signal = releaseSignal
         releaseSignal = nil
         if capture.hasConversionFailure { signal?.finish(throwing: CaptureError.conversion) }
@@ -97,22 +99,23 @@ final class SessionController: ObservableObject {
         message = reason ?? "Cancelling…"
         phase = .cancelling
         partialText = ""
-        capture.stop()
+        stopCapture()
         finishSound()
         operation?.cancel()
         releaseSignal?.finish()
         releaseSignal = nil
     }
 
-    func inputLost() {
+    func audioConfigurationChanged() {
         guard phase == .recording || phase == .starting else { return }
-        cancel(reason: "Recording cancelled because the microphone changed.")
+        do { try capture.recoverAfterConfigurationChange() }
+        catch { cancel(reason: error.localizedDescription) }
     }
 
     private func runSession(_ id: Int, language: String, microphone: String, autoPaste: Bool, target: pid_t?) async {
         defer {
             if id == sessionID {
-                capture.stop()
+                stopCapture()
                 finishSound()
                 releaseSignal?.finish()
                 releaseSignal = nil
@@ -122,6 +125,7 @@ final class SessionController: ObservableObject {
         do {
             try await speech.begin(language: language)
             try Task.checkCancellation()
+            sleepPrevention.start()
             try capture.start(deviceUID: microphone)
             try await capture.waitUntilCapturing()
             try Task.checkCancellation()
@@ -165,7 +169,7 @@ final class SessionController: ObservableObject {
                 phase = .ready
                 return
             }
-            capture.stop()
+            stopCapture()
             finishSound()
             partialText = ""
             message = String(error.localizedDescription.prefix(200))
@@ -209,6 +213,13 @@ final class SessionController: ObservableObject {
             try Task.checkCancellation()
             if let text { partialText = text }
         }
+    }
+
+    @discardableResult
+    private func stopCapture() -> [Float] {
+        let samples = capture.stop()
+        sleepPrevention.stop()
+        return samples
     }
 
     private func finishSound() {

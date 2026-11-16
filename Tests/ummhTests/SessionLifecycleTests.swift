@@ -41,6 +41,7 @@ final class SessionLifecycleTests: XCTestCase {
         rig.settings.language = "auto"
         rig.settings.microphoneUID = "test-device"
         await rig.recording()
+        XCTAssertTrue(rig.sleepPrevention.active)
         XCTAssertFalse(rig.settings.showLiveText)
         XCTAssertEqual(rig.speech.languages, ["auto"])
         XCTAssertEqual(rig.audio.devices, ["test-device"])
@@ -49,6 +50,7 @@ final class SessionLifecycleTests: XCTestCase {
         await eventually { rig.controller.partialText == "partial" }
         rig.controller.release()
         rig.controller.release()
+        XCTAssertFalse(rig.sleepPrevention.active)
         await eventually { rig.controller.phase == .copied }
         XCTAssertEqual(rig.delivery.copies, ["final text"])
         XCTAssertEqual(rig.speech.finishes, 1)
@@ -79,6 +81,7 @@ final class SessionLifecycleTests: XCTestCase {
         XCTAssertEqual(rig.audio.starts, 0)
         XCTAssertTrue(rig.delivery.copies.isEmpty)
         XCTAssertEqual(rig.sound.starts, 0)
+        XCTAssertEqual(rig.sleepPrevention.starts, 0)
     }
 
     @MainActor
@@ -89,7 +92,9 @@ final class SessionLifecycleTests: XCTestCase {
         rig.audio.startup = startup
         rig.controller.press()
         await eventually { startup.waiting }
+        XCTAssertTrue(rig.sleepPrevention.active)
         rig.controller.release()
+        XCTAssertFalse(rig.sleepPrevention.active)
         XCTAssertFalse(rig.audio.active)
         XCTAssertEqual(rig.controller.phase, .cancelling)
         startup.resume(())
@@ -109,6 +114,7 @@ final class SessionLifecycleTests: XCTestCase {
         await eventually { preview.waiting }
         rig.controller.cancel()
         rig.controller.cancel()
+        XCTAssertFalse(rig.sleepPrevention.active)
         rig.controller.press()
         XCTAssertEqual(rig.controller.phase, .cancelling)
         XCTAssertFalse(rig.audio.active)
@@ -187,6 +193,7 @@ final class SessionLifecycleTests: XCTestCase {
         rig.controller.press()
         await eventually { rig.controller.phase == .failed }
         XCTAssertTrue(rig.controller.showsSessionError)
+        XCTAssertFalse(rig.sleepPrevention.active)
         rig.controller.prepare()
         XCTAssertEqual(rig.speech.downloads, [false])
         rig.audio.startError = nil
@@ -203,6 +210,7 @@ final class SessionLifecycleTests: XCTestCase {
         await rig.preview()
         await eventually { rig.controller.phase == .failed }
         XCTAssertFalse(rig.audio.active)
+        XCTAssertFalse(rig.sleepPrevention.active)
         XCTAssertEqual(rig.sound.finishes, 1)
         XCTAssertTrue(rig.delivery.copies.isEmpty)
         rig.speech.previewError = nil
@@ -246,6 +254,7 @@ final class SessionLifecycleTests: XCTestCase {
         await eventually { rig.delivery.attempts == 1 }
         XCTAssertEqual(rig.delivery.posts, 0)
         XCTAssertTrue(rig.audio.active)
+        XCTAssertTrue(rig.sleepPrevention.active)
         XCTAssertEqual(rig.controller.phase, .recording)
         XCTAssertEqual(rig.sound.starts, 2)
         XCTAssertEqual(rig.sound.finishes, 1)
@@ -316,13 +325,48 @@ final class SessionLifecycleTests: XCTestCase {
     }
 
     @MainActor
-    func testInputLossCancelsAndPreservesReason() async {
+    func testConfigurationChangeWithUsableInputDoesNotCancelRecording() async {
         let rig = Rig()
         await rig.recording()
-        rig.controller.inputLost()
-        await eventually { rig.controller.phase == .ready }
-        XCTAssertTrue(rig.controller.message.contains("microphone changed"))
+        rig.controller.audioConfigurationChanged()
+        XCTAssertEqual(rig.controller.phase, .recording)
+        XCTAssertTrue(rig.audio.active)
+        XCTAssertTrue(rig.sleepPrevention.active)
+        rig.controller.release()
+        await eventually { rig.controller.phase == .copied }
+        XCTAssertEqual(rig.delivery.copies, ["final text"])
+        rig.clock.advance(.milliseconds(700))
+    }
+
+    @MainActor
+    func testConfigurationFailureDuringStartupCancelsAndReleasesSleepAssertion() async {
+        let rig = Rig()
+        let startup = Suspension<Void>()
+        rig.audio.startup = startup
+        rig.audio.configurationError = CaptureError.lidClosed
+        await rig.ready()
+        rig.controller.press()
+        await eventually { startup.waiting }
+        rig.controller.audioConfigurationChanged()
         XCTAssertFalse(rig.audio.active)
+        XCTAssertFalse(rig.sleepPrevention.active)
+        startup.resume(())
+        await eventually { rig.controller.phase == .ready }
+        XCTAssertEqual(rig.controller.message, CaptureError.lidClosed.errorDescription)
+        XCTAssertTrue(rig.delivery.copies.isEmpty)
+        XCTAssertEqual(rig.sound.starts, 0)
+    }
+
+    @MainActor
+    func testInputLossCancelsAndPreservesReason() async {
+        let rig = Rig()
+        rig.audio.configurationError = CaptureError.inputChanged
+        await rig.recording()
+        rig.controller.audioConfigurationChanged()
+        await eventually { rig.controller.phase == .ready }
+        XCTAssertTrue(rig.controller.message.contains("microphone disconnected or changed"))
+        XCTAssertFalse(rig.audio.active)
+        XCTAssertFalse(rig.sleepPrevention.active)
         XCTAssertTrue(rig.delivery.copies.isEmpty)
         XCTAssertEqual(rig.sound.finishes, 1)
     }
@@ -375,6 +419,10 @@ private final class FakeAudio: AudioCapturing {
     let samples: [Float] = [0.1, -0.1, 0.2]
     var startup: Suspension<Void>?
     var startError: Error?
+    var configurationError: Error?
+    func recoverAfterConfigurationChange() throws {
+        if let configurationError { throw configurationError }
+    }
     func ownsEngine(_ object: Any?) -> Bool { false }
     func start(deviceUID: String) throws {
         if let startError { throw startError }
@@ -444,6 +492,14 @@ private final class FakeSound: RecordingFeedback {
 }
 
 @MainActor
+private final class FakeSleepPrevention: RecordingSleepPreventing {
+    var active = false
+    var starts = 0
+    func start() { active = true; starts += 1 }
+    func stop() { active = false }
+}
+
+@MainActor
 private final class FakeDelivery: TranscriptDelivering {
     var copies: [String] = []
     var clipboard = "untouched"
@@ -479,6 +535,7 @@ private final class Rig {
     let speech = FakeSpeech()
     let delivery = FakeDelivery()
     let sound = FakeSound()
+    let sleepPrevention = FakeSleepPrevention()
     let clock = TestClock()
     let controller: SessionController
     init(autoPaste: Bool = false) {
@@ -486,7 +543,7 @@ private final class Rig {
         defaults.set(autoPaste, forKey: "autoPaste")
         settings = Settings(defaults: defaults)
         controller = SessionController(settings: settings, capture: audio, speech: speech,
-                                       delivery: delivery, sound: sound, sleep: clock.sleep)
+                                       delivery: delivery, sound: sound, sleepPrevention: sleepPrevention, sleep: clock.sleep)
     }
     deinit { defaults.removePersistentDomain(forName: suite) }
     func ready() async {

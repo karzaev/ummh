@@ -5,6 +5,7 @@ protocol AudioCapturing: AnyObject {
     @MainActor var level: Float { get }
     @MainActor var hasConversionFailure: Bool { get }
     @MainActor func ownsEngine(_ object: Any?) -> Bool
+    @MainActor func recoverAfterConfigurationChange() throws
     @MainActor func start(deviceUID: String) throws
     @MainActor func waitUntilCapturing() async throws
     @MainActor func snapshot() -> [Float]
