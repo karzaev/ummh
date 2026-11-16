@@ -25,16 +25,16 @@ if /usr/bin/strings "$STAGING/ummh.app/Contents/MacOS/ummh" | /usr/bin/grep -E '
 fi
 ln -s /Applications "$STAGING/Applications"
 cat > "$STAGING/READ-ME.txt" <<'NOTICE'
-ummh — local packaging preview
+ummh
 
-This build has not been notarized by Apple. macOS may block it on another Mac.
-This package does not change Gatekeeper.
+Drag ummh into Applications.
 
-To pass the normal Gatekeeper checks for downloaded apps, a release needs
-Developer ID Application signing and Apple notarization. Model files are
-downloaded on first use and are not bundled.
+This build is ad-hoc signed and has not been notarized by Apple. If macOS blocks
+opening it, follow https://support.apple.com/en-gb/102445.
+
+Speech models download on first use. Audio and transcripts are processed locally.
 NOTICE
-diskutil image create from --volumeName "ummh $VERSION preview" --format UDZO "$STAGING" "$DMG"
+diskutil image create from --volumeName "ummh $VERSION" --format UDZO "$STAGING" "$DMG"
 hdiutil verify "$DMG"
 (cd dist && shasum -a 256 "$(basename "$DMG")" > "$(basename "$DMG").sha256")
-printf 'Local preview (not notarized): %s\n' "$DMG"
+printf 'Packaged %s\n' "$DMG"

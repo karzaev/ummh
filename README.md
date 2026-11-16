@@ -25,7 +25,7 @@ model if prompted, and wait for **Ready to dictate**.
 
 **Apple Silicon · macOS 26+**
 
-[Download v0.1.1 (DMG)](https://github.com/karzaev/ummh/releases/download/v0.1.1/ummh-0.1.1-arm64-adhoc.dmg),
+[Download v0.1.2 (DMG)](https://github.com/karzaev/ummh/releases/download/v0.1.2/ummh-0.1.2-arm64-adhoc.dmg),
 open it, and drag ummh into Applications. This build is not notarized; macOS may
 require approval on first launch. See [release details](docs/releases.md).
 
@@ -44,7 +44,7 @@ open dist/ummh.app
 
 Built with Swift, SwiftUI, AppKit and
 [FluidAudio](https://github.com/FluidInference/FluidAudio).
-Parts of the streaming recognition, recording UI and sounds come from
+Microphone capture, parts of the streaming recognition, recording UI and sounds come from
 [VoiceInk](https://github.com/Beingpax/VoiceInk).
 
 [GPL v3](LICENSE) · [Attribution](NOTICE.md) ·

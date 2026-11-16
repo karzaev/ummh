@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.2
 
 - Open the recording panel on the display under the cursor and keep it there until the panel closes. If that display disconnects, move the panel to an available display.
 - Prevent idle display sleep while starting and recording, releasing the assertion when capture stops or fails.
@@ -9,6 +9,7 @@
 - Resolve the preferred microphone with VoiceInk-style fallback, excluding the internal microphone when the lid is closed and retaining external headset support.
 - Isolate microphone capture from system output changes and validate the active input before previews and final delivery.
 - Verified with 52 automated tests and a signed local Release build. Checks cover input selection, 44.1/48 kHz conversion, stereo downmix, capture errors, cancellation and final PCM draining. Live dictation passed with the system-default and USB display microphones, each with the MacBook lid open and closed.
+- Packaged one arm64 DMG for macOS 26+, with verified ad-hoc signing, minimum OS version, SHA-256 and a scan for private build paths and signing details.
 
 ## 0.1.1
 

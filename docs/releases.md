@@ -22,5 +22,7 @@ copy's signing identity with an ad-hoc signature and creates a DMG plus SHA-256.
 It does not change the local app, its signature or existing permissions.
 
 Publish the DMG and checksum with a source tag matching the application build.
+The current release is v0.1.2, build 3. Its DMG is
+`ummh-0.1.2-arm64-adhoc.dmg`, with a matching `.sha256` file.
 Keep LICENSE, NOTICE.md and dependency source references available with the release.
 Homebrew Cask is not currently provided.
