@@ -5,9 +5,9 @@
 - Open the recording panel on the display under the cursor and keep it there until the panel closes. If that display disconnects, move the panel to an available display.
 - Prevent idle display sleep while starting and recording, releasing the assertion when capture stops or fails.
 - Create the menu once and update its status and icon only when their displayed values change.
-- Pin the system-default microphone for each recording. Recover unchanged audio inputs after output configuration changes, and report actual input or format loss separately.
+- Keep native routing for the system-default microphone and configure the tap from the hardware input format, avoiding a startup regression when input and output sample rates differ. Recover unchanged audio inputs after output configuration changes, and report actual input or format loss separately.
 - Explain that closed-lid MacBooks require an external microphone.
-- Verified with 52 automated tests, a signed local Release build and a macOS display-sleep assertion acquire/release check. USB audio recovery still requires a live hardware check.
+- Verified with 53 automated tests, including a stale client sample-rate regression, a signed local Release build and a macOS display-sleep assertion acquire/release check. USB audio recovery still requires a live hardware check.
 
 ## 0.1.1
 

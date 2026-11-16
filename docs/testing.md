@@ -28,6 +28,9 @@ Verify a USB display or headset input with the lid open and closed, both explici
 selected and as the system default. Change only the audio output during recording
 and check that input capture continues. Unplug the selected input and check for
 cancellation with no pasted text, then reconnect and start another recording.
+Also check the system-default microphone with a different sample rate from the
+audio output, such as a 44.1 kHz input and a 48 kHz USB output. Capture must start
+and deliver text without a hardware/client format mismatch.
 
 During a long recording, check `pmset -g assertions` for the `ummh recording`
 display-sleep assertion. It must disappear after release, Escape, a capture error

@@ -87,6 +87,7 @@ struct CaptureInputConfiguration {
         if builtIn && lidClosed { throw CaptureError.lidClosed }
         guard hardwareFormat.sampleRate > 0, hardwareFormat.channelCount > 0,
               tapFormat.sampleRate > 0, tapFormat.channelCount > 0 else { throw CaptureError.unavailable }
+        guard hardwareFormat.sampleRate == tapFormat.sampleRate else { throw CaptureError.formatChanged }
     }
 
     func restore(current: CaptureInputConfiguration?, lidClosed: Bool, running: Bool,
@@ -162,10 +163,16 @@ final class AudioCapture: @unchecked Sendable {
                                         0, &device, UInt32(MemoryLayout<AudioDeviceID>.size))
         }
         let status: OSStatus
-        if #available(macOS 27.0, *) { status = input.withAudioUnit { selectDevice($0) } }
+        if deviceUID.isEmpty {
+            // AVAudioEngine already follows the default input. Reassigning it can
+            // leave its client format on the previous device's sample rate.
+            status = noErr
+        } else if #available(macOS 27.0, *) { status = input.withAudioUnit { selectDevice($0) } }
         else { status = selectDevice(input.audioUnit) }
         guard status == noErr else { throw CaptureError.unavailable }
-        let format = input.outputFormat(forBus: 0)
+        // The client output format can still describe the previous device.
+        // Installing the tap with the hardware format configures the output bus.
+        let format = input.inputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0,
               let target = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16_000, channels: 1, interleaved: false),
               let converter = AVAudioConverter(from: format, to: target) else { throw CaptureError.unavailable }
@@ -197,8 +204,9 @@ final class AudioCapture: @unchecked Sendable {
         do {
             engine.prepare()
             try engine.start()
-            let configuration = CaptureInputConfiguration(deviceID: device, hardwareFormat: input.inputFormat(forBus: 0),
-                                                          tapFormat: format, builtIn: builtIn)
+            let activeDevice = Self.deviceID(input) ?? device
+            let configuration = CaptureInputConfiguration(deviceID: activeDevice, hardwareFormat: input.inputFormat(forBus: 0),
+                                                          tapFormat: format, builtIn: AudioDevices.isBuiltIn(activeDevice))
             try configuration.validate(lidClosed: AudioDevices.lidClosed)
             inputConfiguration = configuration
             restartSampleCount = nil

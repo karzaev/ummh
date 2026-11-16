@@ -9,7 +9,10 @@ panel and application lifecycle. The deployment target is macOS 26 on Apple Sili
 AudioCapture converts microphone PCM into mono Float32 samples at 16 kHz.
 Audio stays in memory. Explicit microphone selection uses scoped AudioUnit access
 on macOS 27 and the compatible AudioUnit property on macOS 26, before capture starts.
-The system-default input is resolved and pinned at the start of each recording.
+System-default capture uses AVAudioEngine's native input routing without setting
+the AudioUnit device. The resolved input is retained for configuration-change checks.
+The tap and converter use the input's hardware format, avoiding stale client
+formats after a device switch with a different sample rate.
 An audio-engine configuration notification is checked against that input and
 its hardware and tap formats. An unchanged input can restart the stopped engine
 with the existing tap and buffered PCM. A missing input, changed format or failed

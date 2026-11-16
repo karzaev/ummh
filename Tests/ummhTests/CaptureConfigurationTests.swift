@@ -73,4 +73,11 @@ final class CaptureConfigurationTests: XCTestCase {
             XCTAssertEqual(($0 as? CaptureError)?.errorDescription, CaptureError.unavailable.errorDescription)
         }
     }
+
+    func testStaleClientSampleRateCannotBecomeTheCaptureBaseline() {
+        let input = configuration(hardwareRate: 44_100, tapRate: 48_000)
+        XCTAssertThrowsError(try input.validate(lidClosed: false)) {
+            XCTAssertEqual(($0 as? CaptureError)?.errorDescription, CaptureError.formatChanged.errorDescription)
+        }
+    }
 }
