@@ -8,7 +8,7 @@
 - Adapt VoiceInk's input-only AUHAL capture, hardware-format setup and bounded callback queue, keeping audio in memory and draining queued PCM on stop.
 - Resolve the preferred microphone with VoiceInk-style fallback, excluding the internal microphone when the lid is closed and retaining external headset support.
 - Isolate microphone capture from system output changes and validate the active input before previews and final delivery.
-- Verified with 52 automated tests and a signed local Release build. Checks cover input selection, 44.1/48 kHz conversion, stereo downmix, capture errors, cancellation and final PCM draining. Live device and lid-position checks are separate.
+- Verified with 52 automated tests and a signed local Release build. Checks cover input selection, 44.1/48 kHz conversion, stereo downmix, capture errors, cancellation and final PCM draining. Live dictation passed with the system-default and USB display microphones, each with the MacBook lid open and closed.
 
 ## 0.1.1
 
