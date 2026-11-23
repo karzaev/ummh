@@ -3,7 +3,7 @@
 Run the automated suite with:
 
 ```sh
-swift test
+./scripts/test.sh
 ```
 
 Tests cover session startup, recording, streaming previews, release, cancellation,
@@ -14,6 +14,13 @@ The capture queue is exercised with deterministic 44.1/48 kHz PCM, stereo downmi
 converter flush, oversized callbacks and render failures.
 They use isolated settings and fake I/O; they do not record the microphone,
 download models or post keyboard events.
+
+The test script resolves the pinned dependency and verifies `patches/fluidaudio.patch`
+before compiling. The cache regressions use temporary directories and a stub HTTP
+response. They cover missing programs and weights, truncated programs, wrong-size
+file replacement, offline rejection before Core ML, and preservation of unmanaged
+files. The joint-output test uses an already cached Parakeet v3 joint and skips
+when it is absent; it never downloads one.
 
 For manual testing, use the packaged app and verify recording, release-to-copy,
 optional paste, Escape cancellation and another recording after cancellation.

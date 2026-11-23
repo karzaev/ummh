@@ -30,6 +30,15 @@ history and punctuation boundaries; the final pass combines a stable prefix
 with the remaining tail when appropriate. FluidAudio's optional NeMo text-processing
 trait is disabled; this dictation pipeline does not use TTS or inverse text normalization.
 
+FluidAudio stays at the revision in Package.swift, with the reviewed changes in
+`patches/fluidaudio.patch`. The build and test scripts apply that exact patch and
+reject a different revision or unrelated checkout changes. The patch preallocates
+the v3 joint's top-K outputs and validates compiled model programs and referenced
+weights before loading. Incomplete caches are repaired before Core ML is called;
+offline startup reports an error and preserves the cache. File downloads replace
+managed files whose published size differs. Equal-size content corruption is not
+detected. These checks run during model preparation, outside the recording loop.
+
 ## Sessions
 
 SessionController owns one operation task with structured preview and release

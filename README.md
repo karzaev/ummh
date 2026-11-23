@@ -35,7 +35,7 @@ signing identity:
 ```sh
 git clone https://github.com/karzaev/ummh.git
 cd ummh
-swift test
+./scripts/test.sh
 ./scripts/build-local.sh
 open dist/ummh.app
 ```

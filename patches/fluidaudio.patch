@@ -1,0 +1,254 @@
+diff --git a/Sources/FluidAudio/ASR/Parakeet/SlidingWindow/TDT/Decoder/TdtDecoderV3.swift b/Sources/FluidAudio/ASR/Parakeet/SlidingWindow/TDT/Decoder/TdtDecoderV3.swift
+index 4f37cd15859b4d507af45a07f1cb1c2bccb680c0..3b74502cf005f0ebf112f1493cbb029a8a6d7232 100644
+--- a/Sources/FluidAudio/ASR/Parakeet/SlidingWindow/TDT/Decoder/TdtDecoderV3.swift
++++ b/Sources/FluidAudio/ASR/Parakeet/SlidingWindow/TDT/Decoder/TdtDecoderV3.swift
+@@ -192,6 +192,7 @@ internal struct TdtDecoderV3: Sendable {
+         let tokenIdBacking = try MLMultiArray(shape: [1, 1, 1] as [NSNumber], dataType: .int32)
+         let tokenProbBacking = try MLMultiArray(shape: [1, 1, 1] as [NSNumber], dataType: .float32)
+         let durationBacking = try MLMultiArray(shape: [1, 1, 1] as [NSNumber], dataType: .int32)
++        let topKBackings = try TdtModelInference.topKOutputBackings(for: jointModel)
+ 
+         // Initialize decoder LSTM state for a fresh utterance
+         // This ensures clean state when starting transcription
+@@ -273,6 +274,7 @@ internal struct TdtDecoderV3: Sendable {
+                 tokenIdBacking: tokenIdBacking,
+                 tokenProbBacking: tokenProbBacking,
+                 durationBacking: durationBacking,
++                topKBackings: topKBackings,
+                 needsTopK: needsTopK
+             )
+ 
+@@ -363,6 +365,7 @@ internal struct TdtDecoderV3: Sendable {
+                     tokenIdBacking: tokenIdBacking,
+                     tokenProbBacking: tokenProbBacking,
+                     durationBacking: durationBacking,
++                    topKBackings: topKBackings,
+                     needsTopK: needsTopK
+                 )
+ 
+@@ -528,6 +531,7 @@ internal struct TdtDecoderV3: Sendable {
+                     tokenIdBacking: tokenIdBacking,
+                     tokenProbBacking: tokenProbBacking,
+                     durationBacking: durationBacking,
++                    topKBackings: topKBackings,
+                     needsTopK: needsTopK
+                 )
+ 
+diff --git a/Sources/FluidAudio/ASR/Parakeet/SlidingWindow/TDT/Decoder/TdtModelInference.swift b/Sources/FluidAudio/ASR/Parakeet/SlidingWindow/TDT/Decoder/TdtModelInference.swift
+index 82f98abace7852e1a3d84a0eb6169be544599dc0..0567ac58014a32bd5d73d9bbd830adfe28dce7b0 100644
+--- a/Sources/FluidAudio/ASR/Parakeet/SlidingWindow/TDT/Decoder/TdtModelInference.swift
++++ b/Sources/FluidAudio/ASR/Parakeet/SlidingWindow/TDT/Decoder/TdtModelInference.swift
+@@ -60,6 +60,22 @@ internal struct TdtModelInference: Sendable {
+         return (output, newState)
+     }
+ 
++    /// Backings for the joint's `top_k_ids` / `top_k_logits` pair, shaped and typed as the
++    /// model declares them, or empty when it has no such pair (v2, 110m).
++    ///
++    /// Back every output or none: a prediction with only some outputs backed takes a slower path
++    /// in Core ML. Parakeet v3's joint backed for its three scalars alone took about 540 µs a
++    /// step against 284 µs with all five backed (M4 Pro, CPU and ANE alike).
++    static func topKOutputBackings(for model: MLModel) throws -> [String: MLMultiArray] {
++        let outputs = model.modelDescription.outputDescriptionsByName
++        var backings: [String: MLMultiArray] = [:]
++        for name in ["top_k_ids", "top_k_logits"] {
++            guard let constraint = outputs[name]?.multiArrayConstraint else { return [:] }
++            backings[name] = try MLMultiArray(shape: constraint.shape, dataType: constraint.dataType)
++        }
++        return backings
++    }
++
+     /// Execute joint network with zero-copy and ANE optimization.
+     ///
+     /// - Parameters:
+@@ -74,6 +90,8 @@ internal struct TdtModelInference: Sendable {
+     ///   - tokenIdBacking: Pre-allocated output for token ID
+     ///   - tokenProbBacking: Pre-allocated output for probability
+     ///   - durationBacking: Pre-allocated output for duration
++    ///   - topKBackings: Pre-allocated `top_k_ids` / `top_k_logits` when the joint has them
++    ///     (see ``topKOutputBackings(for:)``)
+     ///   - needsTopK: When `true`, extract `top_k_ids` / `top_k_logits` from
+     ///     the joint output (JointDecisionv3). Callers should pass `true` only
+     ///     when a caller-level feature (e.g. language-aware script filtering)
+@@ -93,6 +111,7 @@ internal struct TdtModelInference: Sendable {
+         tokenIdBacking: MLMultiArray,
+         tokenProbBacking: MLMultiArray,
+         durationBacking: MLMultiArray,
++        topKBackings: [String: MLMultiArray] = [:],
+         needsTopK: Bool = false
+     ) throws -> TdtJointDecision {
+ 
+@@ -104,11 +123,13 @@ internal struct TdtModelInference: Sendable {
+         preparedDecoderStep.prefetchToNeuralEngine()
+ 
+         // Reuse tiny output tensors for joint prediction (provide raw MLMultiArray backings)
+-        predictionOptions.outputBackings = [
++        var backings: [String: Any] = [
+             "token_id": tokenIdBacking,
+             "token_prob": tokenProbBacking,
+             "duration": durationBacking,
+         ]
++        for (name, backing) in topKBackings { backings[name] = backing }
++        predictionOptions.outputBackings = backings
+ 
+         // Execute joint network using the reusable provider
+         let output = try model.prediction(
+diff --git a/Sources/FluidAudio/Shared/Download/FileDownloader.swift b/Sources/FluidAudio/Shared/Download/FileDownloader.swift
+index b2205a66c546adc09d41ea288012fc14a9841806..e1536eb0f170b64683a0105503b33a99295469a4 100644
+--- a/Sources/FluidAudio/Shared/Download/FileDownloader.swift
++++ b/Sources/FluidAudio/Shared/Download/FileDownloader.swift
+@@ -23,7 +23,8 @@ enum FileDownloader {
+     }
+ 
+     /// Ensure `file` from `repoRemotePath` exists at `destination`: skip when
+-    /// present, create empties locally, otherwise download with retry +
++    /// present (in the managed cache, only at the published size), create
++    /// empties locally, otherwise download with retry +
+     /// byte-range resume (via `<destination>.partial`), validate, and move
+     /// atomically into place.
+     ///
+@@ -44,7 +45,16 @@ enum FileDownloader {
+         onBytes: (@Sendable (Int64, Int64) -> Void)? = nil
+     ) async throws -> Outcome {
+         if FileManager.default.fileExists(atPath: destination.path) {
+-            return .alreadyPresent
++            // In the managed cache, a file whose size is not the published one is
++            // left over from an older or interrupted download (issue #1147: a
++            // `weight.bin` 9 MB longer than published). Fetch it again.
++            guard recoveringBlockedPaths, file.size > 0,
++                let size = ModelCache.fileSize(at: destination), size != file.size
++            else {
++                return .alreadyPresent
++            }
++            logger.warning("Re-downloading \(file.path): \(size) bytes on disk, \(file.size) published")
++            try FileManager.default.removeItem(at: destination)
+         }
+ 
+         let parentDir = destination.deletingLastPathComponent()
+diff --git a/Sources/FluidAudio/Shared/Download/ModelCache.swift b/Sources/FluidAudio/Shared/Download/ModelCache.swift
+index b4575331a3d6c2de3c404351449b3bdfdb5e36a4..252cb82b1893e0fe54d136debfd0e1f3ceb474a3 100644
+--- a/Sources/FluidAudio/Shared/Download/ModelCache.swift
++++ b/Sources/FluidAudio/Shared/Download/ModelCache.swift
+@@ -119,7 +119,8 @@ enum ModelCache {
+     }
+ 
+     /// Validate the on-disk shape of a compiled CoreML model before loading:
+-    /// it must be a directory containing `coremldata.bin`.
++    /// it must be a directory containing `coremldata.bin` and the program
++    /// files `missingProgramFile(in:)` checks for.
+     static func validateCompiledModelLayout(at modelPath: URL, name: String) throws {
+         guard FileManager.default.fileExists(atPath: modelPath.path) else {
+             throw CocoaError(
+@@ -153,6 +154,92 @@ enum ModelCache {
+                     NSLocalizedDescriptionKey: "Missing coremldata.bin in model: \(name)",
+                 ])
+         }
++
++        if let missing = missingProgramFile(in: modelPath) {
++            logger.error("Missing \(missing) in \(name)")
++            throw CocoaError(
++                .fileReadCorruptFile,
++                userInfo: [
++                    NSFilePathErrorKey: modelPath.appendingPathComponent(missing).path,
++                    NSLocalizedDescriptionKey: "Missing \(missing) in model: \(name)",
++                ])
++        }
++    }
++
++    /// The first file a compiled bundle needs to load but lacks (or holds
++    /// empty), as a bundle-relative path; nil when nothing is missing.
++    ///
++    /// An ML Program needs `model.mil` and every file it names through
++    /// `@model_path/` (its weights); a neural network needs
++    /// `model.espresso.net`; a pipeline needs each of its `modelN`
++    /// sub-bundles. With one of these gone, Core ML on the Neural Engine path
++    /// segfaults in `MLModel(contentsOf:)` instead of throwing, so the bundle
++    /// must be caught before the load: an interrupted download left a
++    /// `MelSpectrogram.mlmodelc` with no `model.mil`, and every launch of the
++    /// host app crashed (issue #1147).
++    static func missingProgramFile(in bundle: URL) -> String? {
++        let fileManager = FileManager.default
++        func isNonEmptyFile(_ url: URL) -> Bool {
++            (fileSize(at: url) ?? 0) > 0
++        }
++
++        let program = bundle.appendingPathComponent("model.mil")
++        if let mil = fileManager.contents(atPath: program.path) {
++            // A program ends with the brace that closes it, so a `model.mil` cut
++            // short in a download does not (it segfaults Core ML the same way).
++            guard endsWithClosingBrace(mil) else { return "model.mil" }
++            return modelPathReferences(in: mil).sorted().first {
++                !isNonEmptyFile(bundle.appendingPathComponent($0))
++            }
++        }
++        if isNonEmptyFile(bundle.appendingPathComponent("model.espresso.net")) {
++            return nil
++        }
++        let subBundles =
++            (try? fileManager.contentsOfDirectory(at: bundle, includingPropertiesForKeys: nil))?
++            .filter { $0.lastPathComponent != "analytics" }
++            .filter { fileManager.fileExists(atPath: $0.appendingPathComponent("coremldata.bin").path) }
++            .sorted { $0.lastPathComponent < $1.lastPathComponent } ?? []
++        guard !subBundles.isEmpty else { return "model.mil" }
++        for subBundle in subBundles {
++            if let missing = missingProgramFile(in: subBundle) {
++                return subBundle.lastPathComponent + "/" + missing
++            }
++        }
++        return nil
++    }
++
++    /// The size of the file at `url`, following symbolic links; nil when there
++    /// is no file there (a missing path or a broken link).
++    static func fileSize(at url: URL) -> Int? {
++        let resolved = url.resolvingSymlinksInPath()
++        guard FileManager.default.fileExists(atPath: resolved.path) else { return nil }
++        return (try? FileManager.default.attributesOfItem(atPath: resolved.path))?[.size] as? Int
++    }
++
++    /// Whether `mil` ends with `}` once trailing whitespace is dropped, as every
++    /// compiled `model.mil` does.
++    static func endsWithClosingBrace(_ mil: Data) -> Bool {
++        let whitespace: Set<UInt8> = [0x09, 0x0A, 0x0D, 0x20]
++        guard let last = mil.lastIndex(where: { !whitespace.contains($0) }) else { return false }
++        return mil[last] == UInt8(ascii: "}")
++    }
++
++    /// Bundle-relative paths a `model.mil` loads through `@model_path/`, such
++    /// as `weights/weight.bin`.
++    static func modelPathReferences(in mil: Data) -> Set<String> {
++        let marker = Data("@model_path/".utf8)
++        let quote = UInt8(ascii: "\"")
++        var references: Set<String> = []
++        var searchStart = mil.startIndex
++        while let match = mil.range(of: marker, in: searchStart..<mil.endIndex) {
++            guard let end = mil[match.upperBound...].firstIndex(of: quote) else { break }
++            if let reference = String(data: mil[match.upperBound..<end], encoding: .utf8), !reference.isEmpty {
++                references.insert(reference)
++            }
++            searchStart = end
++        }
++        return references
+     }
+ 
+     /// The subset of `requiredFiles` that is missing or not load-ready under
+diff --git a/Sources/FluidAudio/Shared/Download/ModelHub.swift b/Sources/FluidAudio/Shared/Download/ModelHub.swift
+index 1e9f067e069724348013a87a8ffe585e6e8cd57f..927e83bf0ae043fec03af8952030c0d56e39cd05 100644
+--- a/Sources/FluidAudio/Shared/Download/ModelHub.swift
++++ b/Sources/FluidAudio/Shared/Download/ModelHub.swift
+@@ -341,13 +341,13 @@ public enum ModelHub {
+         let reporter = ProgressReporter(handler: progressHandler, downloadPhaseWeight: 0.5)
+ 
+         let revisionMatches = ModelCache.matchesRevision(at: repoPath, revision: revision)
+-        if !revisionMatches || !ModelCache.allModelsExist(at: repoPath, models: effectiveModels) {
++        if !revisionMatches || !ModelCache.isCacheComplete(at: repoPath, requiredFiles: effectiveModels) {
+             // In offline mode surface a typed error listing the
+             // missing files instead of attempting a HuggingFace fetch.
+             if offlineMode {
+                 let missing =
+                     revisionMatches
+-                    ? ModelCache.missingModels(at: repoPath, models: effectiveModels)
++                    ? ModelCache.incompleteFiles(at: repoPath, requiredFiles: effectiveModels)
+                     : effectiveModels.sorted()
+                 logger.error(
+                     "Offline mode: required models missing at \(repoPath.path): \(missing)"

@@ -8,6 +8,7 @@ if [[ -z "$SIGNING_IDENTITY" || "$SIGNING_IDENTITY" == *$'\n'* || "$SIGNING_IDEN
     printf 'Set CODE_SIGN_IDENTITY to one valid Apple signing identity; ad-hoc signing breaks permission persistence.\n' >&2
     exit 1
 fi
+./scripts/prepare-dependencies.sh
 swift build -c "$CONFIGURATION"
 BIN_DIR="$(swift build -c "$CONFIGURATION" --show-bin-path)"
 APP="$PWD/dist/ummh.app"

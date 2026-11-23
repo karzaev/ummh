@@ -2,8 +2,11 @@
 
 ## Unreleased
 
-- Document isolated FluidAudio decoder and model-cache evaluations. The runtime dependency remains unchanged.
+- Backport FluidAudio's v3 joint output backings and compiled-model cache validation while retaining the pinned SDK revision. Repair incomplete caches before loading and replace managed files with a mismatched published size.
+- Apply and verify the dependency patch through the local build and test scripts. Add regression coverage for damaged caches, offline startup, file recovery and unchanged joint predictions.
+- Document isolated FluidAudio decoder and model-cache evaluations.
 - Validation: 52 regression tests passed and 128 paired recognition comparisons produced identical transcripts. Cache checks reproduced three Core ML crashes and verified five successful file repairs.
+- Local integration passed 63 tests and 24 streaming replays through the signed app with identical baseline transcripts. Dependency preparation was checked from a clean checkout, on repeat runs and with an unrelated edit that it preserved and rejected.
 
 ## 0.1.2
 
