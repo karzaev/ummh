@@ -62,3 +62,26 @@ dist/ummh.app/Contents/MacOS/ummh --replay /path/to/sample.wav --batch
 Replay writes the supplied recording's transcript to standard output. It does not
 record audio or change the clipboard. Replay timings measure computation rather
 than live microphone latency.
+
+## FluidAudio dependency evaluations
+
+Compare a candidate against the pinned FluidAudio revision in separate Release
+builds, applying one upstream change at a time. Keep SpeechEngine,
+WordAgreementEngine, model files and mono Float32 16 kHz input identical. Warm
+the models before measurement and alternate the baseline/candidate order across
+rounds. Compare exact transcript strings in Auto and Russian modes, finalization
+time, first-text timing and peak process RSS.
+
+Accelerated replay measures computation. For release-to-result latency, feed
+audio at its original pace and time the final recognition call. Measure paste
+separately; a recognition replay does not test focus, clipboard or keyboard events.
+The output-buffer optimization is tracked in
+[FluidAudio PR #1168](https://github.com/FluidInference/FluidAudio/pull/1168).
+
+Test cache recovery only on disposable model copies. Include missing or truncated
+`model.mil`, missing or empty weights, and wrong-size weights. Run unsafe Core ML
+loads in separate child processes. Check that repair restores the expected bytes
+and the model loads afterward. Also test altered weights with the original file
+size: the layout and size checks in
+[FluidAudio PR #1150](https://github.com/FluidInference/FluidAudio/pull/1150)
+do not provide a content checksum. A valid cached model must still load offline.

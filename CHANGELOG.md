@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Document isolated FluidAudio decoder and model-cache evaluations. The runtime dependency remains unchanged.
+- Validation: 52 regression tests passed and 128 paired recognition comparisons produced identical transcripts. Cache checks reproduced three Core ML crashes and verified five successful file repairs.
+
 ## 0.1.2
 
 - Open the recording panel on the display under the cursor and keep it there until the panel closes. If that display disconnects, move the panel to an available display.
